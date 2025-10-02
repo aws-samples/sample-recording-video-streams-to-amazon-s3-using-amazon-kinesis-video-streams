@@ -25,7 +25,7 @@ This solution leverages several AWS services to provide seamless video streaming
 
 The workflow begins when a mobile device streams video to KVS. CloudWatch monitors stream metrics, and when conditions are met, an alarm triggers via EventBridge to start the Step Functions workflow. The workflow executes Lambda functions to check tags, alarm state, and upload video clips to S3 for archival storage.
 
-## Deployment Instructions
+## Deployment Instructions :
 
 ### 1. Download the CloudFormation Template
 Download the CloudFormation YAML template file from the provided source.
