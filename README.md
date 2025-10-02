@@ -3,9 +3,44 @@
 
 Read the full AWS blog post here: 
 
-### Deployment Guide
-* Download this CloudFormation YAML template file.
-* Navigate to the CloudFormation console in us-east-1 (N. Virginia)
+## Deployment Instructions
+
+### 1. Download the CloudFormation Template
+Download the CloudFormation YAML template file from the provided source.
+
+### 2. Deploy the CloudFormation Stack
+1. Navigate to the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#) in the **us-east-1 (N. Virginia)** region.
+2. Click on "Create stack" > "With new resources (standard)".
+3. Upload the downloaded template file and click "Next".
+
+### 3. Configure Stack Parameters
+1. **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
+2. **Cognito Creation** (Optional): 
+   - Select **true** if you plan to use the Android application for testing streaming.
+   - Leave as **false** (default) if you don't need the Android app.
+3. **Resource Naming**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "acme-1234").
+4. **Archival Video Clip Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
+
+### 4. Complete Stack Creation
+1. Click "Next" to proceed to the stack options page.
+2. Configure any additional stack options as desired.
+3. Click "Next" to proceed to the review page.
+4. Review your configuration and scroll to the bottom of the page.
+5. Check the acknowledgement box confirming AWS CloudFormation might create IAM resources.
+6. Click "Create stack" to launch the deployment.
+
+## Next Steps
+
+After the stack creation completes successfully (this might take a few minutes), click on the "Outputs" tab of your stack in the CloudFormation console.
+Here you'll find important information such as:
+   - S3 bucket names
+   - Lambda function names
+   - Other resources created by the stack
+   - Connection details or endpoints you may need for integration
+
+## Troubleshooting
+
+If stack creation fails, check the "Events" tab in the CloudFormation console for error messages that can help diagnose the issue.
 
 ## Security
 
