@@ -3,6 +3,28 @@
 
 Read the full AWS blog post here: 
 
+# Solution Architecture
+
+![KVS to S3 Architecture Diagram](./architecture-diagram.png)
+
+This solution leverages several AWS services to provide seamless video streaming and archiving:
+
+- [**Amazon Kinesis Video Streams (KVS)**](https://aws.amazon.com/kinesis/video-streams/) - Captures and processes video streams from connected devices for real-time and batch analytics.
+
+- [**AWS Lambda**](https://aws.amazon.com/lambda/) - Executes code in response to triggers and processes video fragments for archiving, checking tags and alarm states.
+
+- [**AWS Step Functions**](https://aws.amazon.com/step-functions/) - Orchestrates the workflow of Lambda functions to ensure proper video processing and archiving.
+
+- [**Amazon S3**](https://aws.amazon.com/s3/) - Provides durable storage for archived video clips.
+
+- [**Amazon CloudWatch**](https://aws.amazon.com/cloudwatch/) - Monitors stream metrics and triggers alarms based on defined conditions.
+
+- [**Amazon EventBridge**](https://aws.amazon.com/eventbridge/) - Routes CloudWatch alarm state changes to trigger the Step Functions workflow.
+
+- [**Amazon Cognito**](https://aws.amazon.com/cognito/) (Optional) - Provides user authentication for the Android mobile application.
+
+The workflow begins when a mobile device streams video to KVS. CloudWatch monitors stream metrics, and when conditions are met, an alarm triggers via EventBridge to start the Step Functions workflow. The workflow executes Lambda functions to check tags, alarm state, and upload video clips to S3 for archival storage.
+
 ## Deployment Instructions
 
 ### 1. Download the CloudFormation Template
