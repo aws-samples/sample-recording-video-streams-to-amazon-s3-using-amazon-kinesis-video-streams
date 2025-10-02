@@ -37,22 +37,49 @@ Download the CloudFormation YAML template file from the provided source.
 
 ### 3. Configure Stack Parameters
 
-1. **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
+ **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
 
 #### Basic Configurations
 ![CF-SETUP-1](./CF-template-basic-configuration.png)
 
-1. **Cognito Creation** (Optional): 
+
+1. **Unique Deployment String**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "amazon-1234").
+
+2. **Video Archive Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
+
+3. **Cognito Creation** (Optional): 
    - Select **true** if you plan to use the Android application for testing streaming.
    - Leave as **false** (default) if you don't need the Android app.
-2. **Resource Naming**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "acme-1234").
-3. **Archival Video Clip Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
 
 #### Lambda Optional Configurations
 ![CF-SETUP-2](./CF-template-lambda-config-1.png)
 ![CF-SETUP-3](./CF-template-lambda-config-2.png)
 
-1. **Lambda in VPC** (Optional): 
+1. **Lambda VPC Deployment** (Optional): 
+   - Select **true** if you need to deploy the Lambda functions in a existing VPC.
+   - Leave as **false** (default) if you don't need the VPC configuration.
+
+2. **VPC Settings** (If said true in step 1): 
+   - Provide the ID of the VPC you plan to utilize. (eg: `vpc-123456789`)
+
+3. **Subnet Configuration** (If said true in step 1): 
+   - Provide the ID of the first Subnet you plan to utilize.  (eg: `subnet-123456789`)
+   - *Note: this subnet needs to be part of VPC indicated above*
+
+4. **Subnet Configuration 2** (If said true in step 1): 
+   - Provide the ID of the second Subnet you plan to utilize.  (eg: `subnet-98765321`)
+   - *Note: this subnet needs to be part of VPC indicated above*
+
+5. **Seurity Group Configuration** (If said true in step 1): 
+    - Provide the ID of the security group you plan to utilize.  (eg: `sg-123456789`)
+   - *Note: this security group needs to be part of VPC indicated above*
+
+6. **Lambda Encyrption Key Configuration** (Optional): 
+   - Select **true** if you need to utilize a customer-managed KMS key to encrypt Lambda environment variables.
+   - Leave as **false** (default) will utilize servcie managed keys.
+
+7. **Customer-Managed KMS Key** (If said true in step 6): 
+    - Provide the ARN of the KMS key you plan to utilize.  (eg: `arn:aws:kms:{YOUR-REGION}:{YOUR-AWS-ID}:key/{YOUR-KMS-KEY-ID}`)
 
 
 ### 4. Complete Stack Creation
