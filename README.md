@@ -1,9 +1,9 @@
-## Recording Video Streams to Amazon S3 Using Amazon Kinesis Video Streams
+# Recording Video Streams to Amazon S3 Using Amazon Kinesis Video Streams
 
 
 Read the full AWS blog post here: 
 
-# Solution Architecture
+## Solution Architecture
 
 ![KVS to S3 Architecture Diagram](./architecture-diagram.png)
 
