@@ -36,12 +36,24 @@ Download the CloudFormation YAML template file from the provided source.
 3. Upload the downloaded template file and click "Next".
 
 ### 3. Configure Stack Parameters
+
 1. **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
-2. **Cognito Creation** (Optional): 
+
+#### Basic Configurations
+![CF-SETUP-1](./CF-template-basic-configuration.png)
+
+1. **Cognito Creation** (Optional): 
    - Select **true** if you plan to use the Android application for testing streaming.
    - Leave as **false** (default) if you don't need the Android app.
-3. **Resource Naming**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "acme-1234").
-4. **Archival Video Clip Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
+2. **Resource Naming**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "acme-1234").
+3. **Archival Video Clip Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
+
+#### Lambda Optional Configurations
+![CF-SETUP-2](./CF-template-lambda-config-1.png)
+![CF-SETUP-3](./CF-template-lambda-config-2.png)
+
+1. **Lambda in VPC** (Optional): 
+
 
 ### 4. Complete Stack Creation
 1. Click "Next" to proceed to the stack options page.
