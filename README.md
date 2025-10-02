@@ -40,6 +40,9 @@ Download the CloudFormation YAML template file from the provided source.
  **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
 
 #### Basic Configurations
+
+These are parameters you need to proivde for successful deployment
+
 ![CF-SETUP-1](./CF-template-basic-configuration.png)
 
 
@@ -52,6 +55,9 @@ Download the CloudFormation YAML template file from the provided source.
    - Leave as **false** (default) if you don't need the Android app.
 
 #### Lambda Optional Configurations
+
+These paramaters are optional, if you do not need to modify Lambda VPC and encryption key configurations you can skip this part completely. 
+
 ![CF-SETUP-2](./CF-template-lambda-config-1.png)
 ![CF-SETUP-3](./CF-template-lambda-config-2.png)
 
