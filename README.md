@@ -1,11 +1,11 @@
-## My Project
+## Recording Video Streams to Amazon S3 Using Amazon Kinesis Video Streams
 
-TODO: Fill this README out!
 
-Be sure to:
+Read the full AWS blog post here: 
 
-* Change the title in this README
-* Edit your repository description on GitHub
+### Deployment Guide
+* Download this CloudFormation YAML template file.
+* Navigate to the CloudFormation console in us-east-1 (N. Virginia)
 
 ## Security
 
