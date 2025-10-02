@@ -5,7 +5,7 @@ Read the full AWS blog post here:
 
 ## Solution Architecture
 
-![KVS to S3 Architecture Diagram](./architecture-diagram.png)
+![KVS to S3 Architecture Diagram](./blog-assets/architecture-diagram.png)
 
 This solution leverages several AWS services to provide seamless video streaming and archiving:
 
