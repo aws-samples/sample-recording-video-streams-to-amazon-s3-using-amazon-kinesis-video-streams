@@ -43,7 +43,7 @@ Download the CloudFormation YAML template file from the provided source.
 
 These are parameters you need to proivde for successful deployment
 
-![CF-SETUP-1](./CF-template-basic-configuration.png)
+![CF-SETUP-1](./blog-assets/CF-template-basic-configuration.png)
 
 
 1. **Unique Deployment String**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "amazon-1234").
@@ -58,8 +58,8 @@ These are parameters you need to proivde for successful deployment
 
 These paramaters are optional, if you do not need to modify Lambda VPC and encryption key configurations you can skip this part completely. 
 
-![CF-SETUP-2](./CF-template-lambda-config-1.png)
-![CF-SETUP-3](./CF-template-lambda-config-2.png)
+![CF-SETUP-2](./blog-assets/CF-template-lambda-config-1.png)
+![CF-SETUP-3](./blog-assets/CF-template-lambda-config-2.png)
 
 1. **Lambda VPC Deployment** (Optional): 
    - Select **true** if you need to deploy the Lambda functions in a existing VPC.
