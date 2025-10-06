@@ -5,17 +5,17 @@ Read the full AWS blog post here:
 
 ## Solution Architecture
 
-![Kinesis Video Streams to Amazon S3 Architecture Diagram](./blog-assets/architecture-diagram.png)
+![KVS to S3 Architecture Diagram](./architecture-diagram.png)
 
 This solution leverages several AWS services to provide seamless video streaming and archiving:
 
-- [**Amazon Kinesis Video Streams**](https://aws.amazon.com/kinesis/video-streams/) - Captures and processes video streams from connected devices for real-time and batch analytics.
+- [**Amazon Kinesis Video Streams (KVS)**](https://aws.amazon.com/kinesis/video-streams/) - Captures and processes video streams from connected devices for real-time and batch analytics.
 
 - [**AWS Lambda**](https://aws.amazon.com/lambda/) - Executes code in response to triggers and processes video fragments for archiving, checking tags and alarm states.
 
 - [**AWS Step Functions**](https://aws.amazon.com/step-functions/) - Orchestrates the workflow of Lambda functions to ensure proper video processing and archiving.
 
-- [**Amazon Simple Stroge Service**](https://aws.amazon.com/s3/) - Provides durable storage for archived video clips.
+- [**Amazon S3**](https://aws.amazon.com/s3/) - Provides durable storage for archived video clips.
 
 - [**Amazon CloudWatch**](https://aws.amazon.com/cloudwatch/) - Monitors stream metrics and triggers alarms based on defined conditions.
 
@@ -23,27 +23,32 @@ This solution leverages several AWS services to provide seamless video streaming
 
 - [**Amazon Cognito**](https://aws.amazon.com/cognito/) (Optional) - Provides user authentication for the Android mobile application.
 
-The workflow begins when a mobile device streams video to Kinesis Video Streams. CloudWatch monitors stream metrics, and when conditions are met, an alarm triggers via Amazon EventBridge to start the Step Functions workflow. The workflow executes Lambda functions to check tags, alarm state, and upload video clips to Amazon S3 for archival storage.
+The workflow begins when a mobile device streams video to KVS. CloudWatch monitors stream metrics, and when conditions are met, an alarm triggers via EventBridge to start the Step Functions workflow. The workflow executes Lambda functions to check tags, alarm state, and upload video clips to S3 for archival storage.
 
-## Deployment Instructions :
+## Deployment Instructions
 
 ### 1. Download the CloudFormation Template
-Download the AWS CloudFormation YAML template file from the provided source.
+Download the CloudFormation YAML template file from the provided source.
+
+### 1. Download the CloudFormation Template
+
+📥 **[Download CloudFormation Template](./CORRECT_LINK.yaml)** - Right-click and "Save As" to download the YAML file.
+
 
 ### 2. Deploy the CloudFormation Stack
-1. Navigate to the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#) in the **us-east-1 (N. Virginia)** region.
+1. Navigate to the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#) in the `us-east-1 (N. Virginia)` region.
 2. Click on "Create stack" > "With new resources (standard)".
 3. Upload the downloaded template file and click "Next".
 
 ### 3. Configure Stack Parameters
 
- **Stack name**: Enter a name for your stack.
+ **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
 
 #### Basic Configurations
 
 These are parameters you need to proivde for successful deployment
 
-![CF-SETUP-1](./blog-assets/CF-template-basic-configuration.png)
+![CF-SETUP-1](./CF-template-basic-configuration.png)
 
 
 1. **Unique Deployment String**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "amazon-1234").
@@ -51,15 +56,15 @@ These are parameters you need to proivde for successful deployment
 2. **Video Archive Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
 
 3. **Cognito Creation** (Optional): 
-   - Select **true** if you plan to use the Android application for testing streaming.
+   - Select **true** if you plan to use the sample Android application for stream testing.
    - Leave as **false** (default) if you don't need the Android app.
 
 #### Lambda Optional Configurations
 
 These paramaters are optional, if you do not need to modify Lambda VPC and encryption key configurations you can skip this part completely. 
 
-![CF-SETUP-2](./blog-assets/CF-template-lambda-config-1.png)
-![CF-SETUP-3](./blog-assets/CF-template-lambda-config-2.png)
+![CF-SETUP-2](./CF-template-lambda-config-1.png)
+![CF-SETUP-3](./CF-template-lambda-config-2.png)
 
 1. **Lambda VPC Deployment** (Optional): 
    - Select **true** if you need to deploy the Lambda functions in a existing VPC.
@@ -100,7 +105,7 @@ These paramaters are optional, if you do not need to modify Lambda VPC and encry
 
 After the stack creation completes successfully (this might take a few minutes), click on the "Outputs" tab of your stack in the CloudFormation console.
 Here you'll find important information such as:
-   - Amazon S3 bucket names
+   - S3 bucket names
    - Lambda function names
    - Other resources created by the stack
    - Connection details or endpoints you may need for integration
@@ -108,6 +113,9 @@ Here you'll find important information such as:
 ## Troubleshooting
 
 If stack creation fails, check the "Events" tab in the CloudFormation console for error messages that can help diagnose the issue.
+
+## Solution Walkthrough
+Head back to the [Recording mobile video to Amazon S3 using Amazon Kinesis Video Streams](https://aws.amazon.com/media) AWS blog for walkthrough of the solution, future considerations and clean up. 
 
 ## Security
 
