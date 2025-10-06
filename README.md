@@ -32,7 +32,7 @@ Download the CloudFormation YAML template file from the provided source.
 
 ### 1. Download the CloudFormation Template
 
-📥 **[Download CloudFormation Template](./CORRECT_LINK.yaml)** - Right-click and "Save As" to download the YAML file.
+📥 **[Download CloudFormation Template](./kinesis-video-streams-to-amazon-s3-blog-template.yaml)** - Right-click and "Save As" to download the YAML file.
 
 
 ### 2. Deploy the CloudFormation Stack
