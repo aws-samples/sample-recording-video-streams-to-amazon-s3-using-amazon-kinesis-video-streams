@@ -1,0 +1,843 @@
+AWSTemplateFormatVersion: '2010-09-09'
+Description: CloudFormation template to deploy three Lambda functions and a Step Functions state machine to process CloudWatch Alarm events and Kinesis Video Stream clips
+
+Parameters:
+  RandomString:
+    Type: String
+    Description: A LOWERCASE string to deploy unqiue names. Change this each time you deploy.
+    AllowedPattern: '^[a-z0-9-]*$'
+    Default: company-1122
+
+  VideoArchiveLenght:
+    Type: Number
+    Default: '180'
+    Description: 'Indicate the desired lenght of archived video clips (in seconds).  Default is 3 minites (180 seconds)'
+
+  CognitoCreation:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+      - 'true'
+      - 'false'
+    Description: 'Select true, if you want to create cognito for authentication for the sample andriod App'
+
+  VPCLambdaCreation:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+        - 'true'
+        - 'false'
+    Description: 'Select true, if you want to add Lambda functions to an existing VPC you own.'
+
+  SubnetID1:
+    Type: String
+    Description: 'Disregard IF SAID FALSE TO ABOVE* Input first subnet ID.'
+    AllowedPattern: '^[a-z0-9-]*$'
+    Default: 'subnet-123456789'
+  
+  SubnetID2:
+    Type: String
+    Description: 'Disregard IF SAID FALSE TO ABOVE* Input second subnet ID.'
+    AllowedPattern: '^[a-z0-9-]*$'
+    Default: 'subnet-987654321'
+
+  VPCID:
+    Type: String
+    Description: 'Disregard IF SAID FALSE TO ABOVE* Input your desired VPC ID.'
+    AllowedPattern: '^[a-z0-9-]*$'
+    Default: 'vpc-123456789'
+  
+  EnvironmentVariableEncryption:
+    Type: String
+    Default: 'false'
+    AllowedValues:
+        - 'true'
+        - 'false'
+    Description: 'Select true, if you require Lambda environment variables to be encrypted with customer-managed KMS keys'
+
+  LambdaKMSKey:
+    Type: String
+    Description: 'Disregard IF SAID FALSE TO ABOVE* Input KMS key ARN.'
+    Default: 'arn:aws:kms:YOUR-REGION:YOUR-AWS-ID:key/YOUR-KMS-KEY-ID'
+
+  SecurityGroupID:
+    Type: String
+    Description: 'Disregard IF SAID NO TO ABOVE* Input security group ID.'
+    AllowedPattern: '^[a-z0-9-]*$'
+    Default: 'sg-123456789'
+
+Metadata:
+  AWS::CloudFormation::Interface:
+    ParameterGroups:
+      - Label: 
+          default: "Core Configurations"
+        Parameters:
+          - RandomString
+          - VideoArchiveLenght
+          - CognitoCreation
+      - Label:
+          default: "Lambda Optional Configurations"
+        Parameters:
+          - VPCLambdaCreation
+          - VPCID
+          - SubnetID1
+          - SubnetID2
+          - SecurityGroupID
+          - EnvironmentVariableEncryption
+          - LambdaKMSKey
+
+    ParameterLabels:
+      RandomString:
+        default: "Unique Deployment String"
+      VideoArchiveLenght:
+        default: "Video Archive Length"
+      VPCLambdaCreation:
+        default: "Deploy Lambda in VPC?"
+      CognitoCreation:
+        default: "Create Cognito for sample Android App?"
+      VPCID:
+        default: "VPC ID (optional)"
+      SubnetID1:
+        default: "Subnet ID 1 (optional)"
+      SubnetID2:
+        default: "Subnet ID 2 (optional)"
+      SecurityGroupID:
+        default: "Security Group ID (optional)"
+      EnvironmentVariableEncryption:
+        default: "Encrypt Lambda Environment Variables?"
+      LambdaKMSKey:
+        default: "Lambda KMS Key ARN (optional)"
+
+Conditions:
+  ShouldCreateCognito: !Equals [!Ref CognitoCreation, 'true']
+  ShouldCreateKMSKey: !Equals [!Ref EnvironmentVariableEncryption, 'true']
+  ShouldCreateVPC: !Equals [!Ref VPCLambdaCreation, 'true']
+
+
+Resources:
+ #S3 Bucket for Video Clip Storage
+  KVSStreamBucket:
+    Type: 'AWS::S3::Bucket'
+    Properties:
+      BucketName: !Sub 'kvs-to-s3-stream-${RandomString}'
+      BucketEncryption:
+        ServerSideEncryptionConfiguration:
+          - ServerSideEncryptionByDefault:
+              SSEAlgorithm: 'AES256'
+      LoggingConfiguration:
+        LogFilePrefix: 'kvs-to-s3-stream-access-logs/'
+      VersioningConfiguration:
+        Status: Enabled
+      PublicAccessBlockConfiguration:
+        BlockPublicAcls: true
+        BlockPublicPolicy: true
+        IgnorePublicAcls: true
+        RestrictPublicBuckets: true
+
+  KVSStream: 
+    Type: AWS::KinesisVideo::Stream
+    Properties: 
+        Name: !Sub 'demo-stream-${RandomString}'
+        DataRetentionInHours: 168
+  
+  
+  CloudWatchAlarm:
+    Type: AWS::CloudWatch::Alarm
+    Properties:
+        AlarmName: !Sub 'demo-stream-cw-alarm-${RandomString}'
+        ActionsEnabled: true
+        OKActions: []
+        AlarmActions: []
+        InsufficientDataActions: []
+        MetricName: PutMedia.IncomingFragments
+        Namespace: AWS/KinesisVideo
+        Statistic: Sum
+        Dimensions:
+            - Name: StreamName
+              Value: !Ref KVSStream
+        Period: 60
+        EvaluationPeriods: 1
+        DatapointsToAlarm: 1
+        Threshold: 5
+        ComparisonOperator: GreaterThanOrEqualToThreshold
+        TreatMissingData: notBreaching
+        Tags:
+          - Key: RepeatedAlarm
+            Value: 'true'
+
+  KVSLambdaDeadLetterQueue:
+    Type: 'AWS::SQS::Queue'
+    Properties:
+      QueueName: !Sub 'kvs-to-s3-dlq-${RandomString}'
+      KmsMasterKeyId: alias/aws/sqs
+
+
+  # IAM Role for Lambda
+  LambdaExecutionRoleKVStoS3Blog:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: lambda.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+
+        - PolicyName: !Sub 'LambdaCloudWatchLoggingAccess-${RandomString}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'logs:CreateLogGroup'
+                  - 'logs:CreateLogStream'
+                  - 'logs:PutLogEvents'
+                Resource: 
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CloudWatchAlarmProcessor1-${RandomString}:*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/CloudWatchAlarmProcessor2-${RandomString}:*'
+                  - !Sub 'arn:aws:logs:${AWS::Region}:${AWS::AccountId}:log-group:/aws/lambda/KinesisVideoStreamProcessor-${RandomString}:*'
+
+        - PolicyName: !Sub 'LambdaCloudWatchAccess-${RandomString}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'cloudwatch:ListTagsForResource'
+                  - 'cloudwatch:DescribeAlarms'
+                Resource:
+                  - !Sub 'arn:aws:cloudwatch:${AWS::Region}:${AWS::AccountId}:alarm:*'
+
+        - PolicyName: !Sub 'LambdaVPCAccess-${RandomString}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:CreateNetworkInterface"
+                  - "ec2:DescribeNetworkInterfaces"
+                  - "ec2:DescribeSubnets"
+                  - "ec2:DeleteNetworkInterface"
+                  - "ec2:AssignPrivateIpAddresses"
+                  - "ec2:UnassignPrivateIpAddresses"
+                Resource: "*"
+                Condition:
+                  ArnLikeIfExists:
+                    'ec2:Vpc': !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:vpc/${VPCID}"
+          
+        - PolicyName: !Sub 'LambdaVPCA-SGAccess-${RandomString}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - "ec2:DescribeSecurityGroups"
+                Resource: !Sub "arn:aws:ec2:${AWS::Region}:${AWS::AccountId}:security-group/${SecurityGroupID}"
+
+        - PolicyName:  !Sub 'LambdaKinesisVideoAccess-${RandomString}' 
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'kinesisvideo:GetDataEndpoint'
+                  - 'kinesisvideo:GetClip'
+                Resource: !GetAtt KVSStream.Arn
+
+        - PolicyName: !Sub 'LambdaS3Access-${RandomString}' 
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 's3:PutObject'
+                Resource: 
+                - !GetAtt KVSStreamBucket.Arn
+                - !Join ["", [!GetAtt KVSStreamBucket.Arn, "/*"]]
+
+        - PolicyName: !Sub 'LambdaSQSAccess-${RandomString}'
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'sqs:SendMessage'
+                Resource: !GetAtt KVSLambdaDeadLetterQueue.Arn
+
+
+  # IAM Role for EventBridge to invoke Step Functions
+  EventBridgeRole:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: events.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: EventBridgeStepFunctionInvokePolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'states:StartExecution'
+                Resource: !GetAtt StepFunction.Arn
+
+  # First Lambda Function
+  LambdaFunction1:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub 'CloudWatchAlarmProcessor1-${RandomString}'
+      Timeout: 120
+      ReservedConcurrentExecutions: 10
+      DeadLetterConfig:
+        TargetArn: !GetAtt KVSLambdaDeadLetterQueue.Arn
+      VpcConfig: !If
+        - ShouldCreateVPC
+        - SubnetIds: 
+            - !Ref SubnetID1
+            - !Ref SubnetID2
+          SecurityGroupIds: 
+            - !Ref SecurityGroupID
+        - !Ref AWS::NoValue
+      KmsKeyArn: !If
+        - ShouldCreateKMSKey
+        - !Ref LambdaKMSKey
+        - !Ref AWS::NoValue
+      Handler: index.lambda_handler
+      Role: !GetAtt LambdaExecutionRoleKVStoS3Blog.Arn
+      Code:
+        ZipFile: |
+          import json
+          import boto3
+          from dateutil import parser
+          from typing import List
+
+          session = boto3.session.Session()
+          CW_CLIENT = session.client('cloudwatch')
+
+          def lambda_handler(event, context):
+              start_time = event["time"]
+              start_time_epoch = round(parser.parse(start_time).timestamp())
+              print("start_time:", start_time_epoch)
+
+              event["time"] = start_time_epoch
+              alarm_arn = event["resources"][0]
+              alarm_name = event["detail"]["alarmName"]
+              alarm_tags = CW_CLIENT.list_tags_for_resource(ResourceARN=alarm_arn)
+
+              if check_if_repeated_alarm_enabled(alarm_tags.get("Tags")):
+                  output =  "RepeatedAlarm"
+              else:
+                  output = "NoRepeatedAlarm"
+
+              return {
+                  'output': output,
+                  'event': event
+              }
+
+          def check_if_repeated_alarm_enabled(tags: List[dict], expected_tag="TagForRepeatedNotification"):
+
+              tag_to_check = ["RepeatedAlarm","true"]
+              key = tag_to_check[0]
+              value = tag_to_check[1]
+              for tag in tags:
+                  if tag.get("Key") == key and tag.get("Value") == value:
+                      return True
+              return False
+      Runtime: python3.13
+
+  # Second Lambda Function
+  LambdaFunction2:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub 'CloudWatchAlarmProcessor2-${RandomString}'
+      Timeout: 120
+      Handler: index.lambda_handler
+      ReservedConcurrentExecutions: 10
+      DeadLetterConfig:
+        TargetArn: !GetAtt KVSLambdaDeadLetterQueue.Arn
+      VpcConfig: !If
+        - ShouldCreateVPC
+        - SubnetIds: 
+            - !Ref SubnetID1
+            - !Ref SubnetID2
+          SecurityGroupIds: 
+            - !Ref SecurityGroupID
+        - !Ref AWS::NoValue
+      KmsKeyArn: !If
+        - ShouldCreateKMSKey
+        - !Ref LambdaKMSKey
+        - !Ref AWS::NoValue
+      Role: !GetAtt LambdaExecutionRoleKVStoS3Blog.Arn
+      Code:
+        ZipFile: |
+          import json
+          import os
+          from typing import List
+          import datetime
+          import logging
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          import boto3
+
+          session = boto3.session.Session()
+          CW_CLIENT = session.client('cloudwatch')
+
+          def lambda_handler(event, context):
+              logger.info(event)
+              try:
+                  event = event["event"]
+
+              except Exception as e:
+                  pass
+
+              # Set the default alarm status response as null
+              event.update({"currState": "null"})
+
+              try:
+                  # Retrieve the CloudWatch Alarm Name from the incoming event
+                  alarm_arn = event["resources"][0]
+                  alarm_name = event["detail"]["alarmName"]
+
+                  # Describe and check the tags on the CloudWatch Alarm
+                  # And See if the tag key used for repeated notification exists,
+                  # and has the correct value as defined in environment variable
+                  alarm_tags = CW_CLIENT.list_tags_for_resource(ResourceARN=alarm_arn)
+                  logger.info(alarm_tags)
+                  output = "NoRepeatedAlarm"
+
+                  if check_if_repeated_alarm_enabled(alarm_tags.get("Tags")):
+                      alarm_response = CW_CLIENT.describe_alarms(
+                          AlarmNames=[alarm_name],
+                          AlarmTypes=["CompositeAlarm", "MetricAlarm"]
+                      )
+                      logger.info(alarm_response)
+
+                      if len(alarm_response.get("MetricAlarms")) >0:
+                          alarm_details = alarm_response.get("MetricAlarms")[0]
+                      elif len(alarm_response.get("CompositeAlarms")) > 0:
+                          alarm_details = alarm_response.get("CompositeAlarms")[0]
+
+                      alarm_details = json.loads(
+                          json.dumps(
+                              alarm_details, default=datetime_converter
+                          )
+                      )
+
+                      if alarm_details.get("StateValue") == "ALARM":
+                          output = "InAlarm"
+
+                      event["currState"] = alarm_details.get("StateValue")
+
+              except Exception as e:
+                  logger.error(f"Error: {repr(e)}")
+                  raise
+
+              print(output)
+              return {
+                  "output" : output,
+                  "event": event
+                  }
+
+          def datetime_converter(field):
+              if isinstance(field, datetime.datetime):
+                  return field.__str__()
+
+          def check_if_repeated_alarm_enabled(tags: List[dict], expected_tag="TagForRepeatedNotification"):
+ 
+              tag_to_check = ["RepeatedAlarm","true"]
+              key = tag_to_check[0]
+              value = tag_to_check[1]
+              for tag in tags:
+                  if tag.get("Key") == key and tag.get("Value") == value:
+                      return True
+              return False
+
+          class CheckAlarmFailed(Exception):
+              pass
+      Runtime: python3.13
+
+  # Third Lambda Function
+  LambdaFunction3:
+    Type: 'AWS::Lambda::Function'
+    Properties:
+      FunctionName: !Sub 'KinesisVideoStreamProcessor-${RandomString}'
+      Handler: index.lambda_handler
+      ReservedConcurrentExecutions: 10
+      DeadLetterConfig:
+        TargetArn: !GetAtt KVSLambdaDeadLetterQueue.Arn
+      Role: !GetAtt LambdaExecutionRoleKVStoS3Blog.Arn
+      Timeout: 300
+      VpcConfig: !If
+        - ShouldCreateVPC
+        - SubnetIds: 
+            - !Ref SubnetID1
+            - !Ref SubnetID2
+          SecurityGroupIds: 
+            - !Ref SecurityGroupID
+        - !Ref AWS::NoValue
+      KmsKeyArn: !If
+        - ShouldCreateKMSKey
+        - !Ref LambdaKMSKey
+        - !Ref AWS::NoValue
+      Environment:
+        Variables:
+          S3_BUCKET_NAME: !Ref KVSStreamBucket
+          CLIP_DURATION: !Ref VideoArchiveLenght
+      Code:
+        ZipFile: |
+          import json
+          import logging
+          import boto3
+          from datetime import datetime, timezone
+          import time
+          import random
+          import string
+          import os
+          from dateutil import parser
+
+          logger = logging.getLogger()
+          logger.setLevel(logging.INFO)
+
+          kvs_client = boto3.client('kinesisvideo')
+          s3_client = boto3.client('s3')
+
+          def lambda_handler(event, context):
+              try:
+                  output = event["output"]
+                  event = event["event"]
+
+              except Exception as e:
+                  logger.error(f"Error: {repr(e)}")
+                  raise
+
+              stream_name = event["detail"]["configuration"]["metrics"][0]["metricStat"]["metric"]["dimensions"]["StreamName"]
+
+              bucket_name = os.environ['S3_BUCKET_NAME']
+
+              # Get the data endpoint
+              endpoint = kvs_client.get_data_endpoint(
+                  StreamName=stream_name,
+                  APIName='GET_CLIP'
+              )['DataEndpoint']
+
+              #calculate time
+              start_time_epoch = event["time"]
+              end_time_epoch = start_time_epoch + int(os.environ['CLIP_DURATION'])
+
+              event["time"] = end_time_epoch
+
+              # Get the clip from the stream using PRODUCER_TIMESTAMP
+              media_client = boto3.client('kinesis-video-archived-media', endpoint_url=endpoint)
+              try:
+                  clip_response = media_client.get_clip(
+                      StreamName=stream_name,
+                      ClipFragmentSelector={
+                          'FragmentSelectorType': 'PRODUCER_TIMESTAMP',
+                          'TimestampRange': {
+                              'StartTimestamp': start_time_epoch,  # Convert milliseconds to seconds
+                              'EndTimestamp': end_time_epoch # Example: 1 minute duration
+                          }
+                      }
+                  )
+
+                  current_time =time.localtime()
+                  local_year = current_time.tm_year
+                  local_month = current_time.tm_mon
+                  local_day = current_time.tm_mday
+                  local_hour = current_time.tm_hour
+                  local_min = current_time.tm_min
+
+                  random_4string = ''.join(random.choices(string.ascii_letters, k=4))
+
+                  # Read the clip payload and write to S3
+                  s3_key = f"stream={stream_name}/year={local_year}/month={local_month}/day={local_day}/clip-{stream_name}-{local_year}-{local_month}-{local_day}T{local_hour}h:{local_min}min-{random_4string}.mp4"
+                  s3_client.upload_fileobj(clip_response['Payload'], bucket_name, s3_key)
+
+              except Exception as e:
+                  logger.error(f"Error: {repr(e)}")
+                  pass
+
+              return  {
+                  "output": output,
+                  "event": event
+                  }
+      Runtime: python3.13
+
+  StepFunctionExecutionRoleKVStoS3Blog:
+    Type: 'AWS::IAM::Role'
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Service: states.amazonaws.com
+            Action: 'sts:AssumeRole'
+      Policies:
+        - PolicyName: !Sub 'StepFunctionInvokePolicy-${RandomString}' 
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - 'lambda:InvokeFunction'
+                Resource: 
+                  - !GetAtt LambdaFunction1.Arn
+                  - !GetAtt LambdaFunction2.Arn
+                  - !GetAtt LambdaFunction3.Arn
+
+
+  # Step Functions State Machine
+  StepFunction:
+    Type: 'AWS::StepFunctions::StateMachine'
+    Properties:
+      StateMachineName: !Sub 'StepFunction-KVStoS3-${RandomString}'
+      DefinitionString:
+        Fn::Sub: |
+          {
+            "Comment": "A description of my state machine",
+            "StartAt": "Check Alarm Tags",
+            "States": {
+              "Check Alarm Tags": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "Payload.$": "$",
+                  "FunctionName": "${LambdaFunction1.Arn}"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException",
+                      "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Next": "Desired Alarm?"
+              },
+              "Desired Alarm?": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.output",
+                    "StringEquals": "RepeatedAlarm",
+                    "Next": "Wait"
+                  }
+                ],
+                "Default": "Pass"
+              },
+              "Wait": {
+                "Type": "Wait",
+                "Next": "Check Alarm State",
+                "Seconds": ${VideoArchiveLenght}
+              },
+              "Check Alarm State": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "Payload.$": "$",
+                  "FunctionName": "${LambdaFunction2.Arn}"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException",
+                      "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Next": "Upload Video Clips"
+              },
+              "Upload Video Clips": {
+                "Type": "Task",
+                "Resource": "arn:aws:states:::lambda:invoke",
+                "OutputPath": "$.Payload",
+                "Parameters": {
+                  "Payload.$": "$",
+                  "FunctionName": "${LambdaFunction3.Arn}"
+                },
+                "Retry": [
+                  {
+                    "ErrorEquals": [
+                      "Lambda.ServiceException",
+                      "Lambda.AWSLambdaException",
+                      "Lambda.SdkClientException",
+                      "Lambda.TooManyRequestsException"
+                    ],
+                    "IntervalSeconds": 1,
+                    "MaxAttempts": 3,
+                    "BackoffRate": 2
+                  }
+                ],
+                "Next": "Stream Incoming?"
+              },
+              "Stream Incoming?": {
+                "Type": "Choice",
+                "Choices": [
+                  {
+                    "Variable": "$.output",
+                    "StringEquals": "InAlarm",
+                    "Comment": "still in alarm",
+                    "Next": "Wait"
+                  }
+                ],
+                "Default": "Pass"
+              },
+              "Pass": {
+                "Type": "Pass",
+                "End": true
+              }
+            }
+          }
+      RoleArn: !GetAtt StepFunctionExecutionRoleKVStoS3Blog.Arn
+
+
+  # CloudWatch Event Rule
+  CloudWatchEventRule:
+    Type: 'AWS::Events::Rule'
+    Properties:
+      Description: 'Rule to trigger Lambda on CloudWatch Alarm state change'
+      EventPattern:
+        source:
+          - 'aws.cloudwatch'
+        detail-type:
+          - 'CloudWatch Alarm State Change'
+      State: ENABLED
+      Targets:
+        - Arn: !GetAtt StepFunction.Arn
+          Id: StepFunctionTrigger
+          RoleArn: !GetAtt EventBridgeRole.Arn
+
+
+  UserPool:
+    Type: AWS::Cognito::UserPool
+    Condition: ShouldCreateCognito
+    Properties:
+      UserPoolName: !Sub 'cognito-user-pool-KVStoS3-${RandomString}'
+      AutoVerifiedAttributes:
+        - email
+      UsernameAttributes:
+        - email
+      Schema:
+        - Name: email
+          AttributeDataType: String
+          Mutable: false
+          Required: true
+
+  UserPoolClient:
+    Type: AWS::Cognito::UserPoolClient
+    Condition: ShouldCreateCognito
+    Properties:
+      ClientName: !Sub 'cognito-app-client-KVStoS3-${RandomString}'
+      UserPoolId: !Ref UserPool
+      GenerateSecret: true
+      ExplicitAuthFlows:
+        - ALLOW_USER_PASSWORD_AUTH
+        - ALLOW_REFRESH_TOKEN_AUTH
+        - ALLOW_USER_SRP_AUTH
+      PreventUserExistenceErrors: ENABLED
+      RefreshTokenValidity: 30
+      AccessTokenValidity: 1
+      IdTokenValidity: 1
+      TokenValidityUnits:
+        AccessToken: hours
+        IdToken: hours
+        RefreshToken: days
+
+
+ # Identity Pool with authenticated access to Cognito User Pool
+  IdentityPool:
+    Type: AWS::Cognito::IdentityPool
+    Condition: ShouldCreateCognito
+    Properties:
+      IdentityPoolName: !Sub 'cognito-identity-pool-KVStoS3-${RandomString}'
+      AllowUnauthenticatedIdentities: false
+      CognitoIdentityProviders:
+        - ClientId: !Ref UserPoolClient
+          ProviderName: !GetAtt UserPool.ProviderName
+          ServerSideTokenCheck: false
+
+  # IAM Role for authenticated users
+  CognitoAuthenticatedRole:
+    Type: AWS::IAM::Role
+    Condition: ShouldCreateCognito
+    Properties:
+      AssumeRolePolicyDocument:
+        Version: '2012-10-17'
+        Statement:
+          - Effect: Allow
+            Principal:
+              Federated: cognito-identity.amazonaws.com
+            Action: sts:AssumeRoleWithWebIdentity
+            Condition:
+              StringEquals:
+                cognito-identity.amazonaws.com:aud: !Ref IdentityPool
+              ForAnyValue:StringLike:
+                cognito-identity.amazonaws.com:amr: authenticated
+      Policies:
+        - PolicyName: AuthenticatedPolicy
+          PolicyDocument:
+            Version: '2012-10-17'
+            Statement:
+              - Effect: Allow
+                Action:
+                  - kinesisvideo:CreateStream
+                  - kinesisvideo:DescribeStream
+                  - kinesisvideo:GetDASHStreamingSessionURL
+                  - kinesisvideo:GetDataEndpoint
+                  - kinesisvideo:GetHLSStreamingSessionURL
+                  - kinesisvideo:PutMedia
+                  - kinesisvideo:UpdateStream
+                Resource: 
+                  - !GetAtt KVSStream.Arn
+
+  # Identity Pool Role Attachment
+  IdentityPoolRoleAttachment:
+    Type: AWS::Cognito::IdentityPoolRoleAttachment
+    Condition: ShouldCreateCognito
+    Properties:
+      IdentityPoolId: !Ref IdentityPool
+      Roles:
+        authenticated: !GetAtt CognitoAuthenticatedRole.Arn
+
+
+Outputs:
+  LambdaFunction1:
+    Description: "Navigate of the Check Tags Lambda function"
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#functions/CloudWatchAlarmProcessor1-${RandomString}
+  LambdaFunction2:
+    Description: "Navigate of the Check Alarm Status Lambda function"
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#functions/CloudWatchAlarmProcessor2-${RandomString}
+  LambdaFunction3:
+    Description: "Navigate of the KinesisVideoStreamProcessor Lambda function"
+    Value: !Sub https://${AWS::Region}.console.aws.amazon.com/lambda/home?region=${AWS::Region}#functions/KinesisVideoStreamProcessor-${RandomString}
+  StepFunctionArn:
+    Description: "ARN of the Step Functions state machine"
+    Value: !GetAtt StepFunction.Arn
+  KVSStreamName:
+    Description: "Name of the Kinesis Video Stream"
+    Value: !Ref KVSStream
+  KVSStreamArn:
+    Description: "ARN of the Kinesis Video Stream"
+    Value: !GetAtt KVSStream.Arn
+
