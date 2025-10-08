@@ -30,8 +30,6 @@ The workflow begins when a mobile device streams video to KVS. CloudWatch monito
 ### 1. Download the CloudFormation Template
 Download the CloudFormation YAML template file from the provided source.
 
-### 1. Download the CloudFormation Template
-
 📥 **[Download CloudFormation Template](./kinesis-video-streams-to-amazon-s3-blog-template.yaml)**
 
 
@@ -116,6 +114,10 @@ If stack creation fails, check the "Events" tab in the CloudFormation console fo
 
 ## Solution Walkthrough
 Head back to the [Recording mobile video to Amazon S3 using Amazon Kinesis Video Streams](https://aws.amazon.com/media) AWS blog for walkthrough of the solution, future considerations and clean up. 
+
+## Considerations
+
+This solution has been tested with the [AWS samples AmazonKinesisVideoDemoApp](https://github.com/awslabs/aws-sdk-android-samples/tree/main/AmazonKinesisVideoDemoApp)
 
 ## Security
 
