@@ -1,7 +1,7 @@
 # Recording Video Streams to Amazon S3 Using Amazon Kinesis Video Streams
 
 
-Read the full AWS blog post here: 
+Read the full AWS blog post here: [Recording Mobile Video to Amazon S3 Using Amazon Kinesis Video Streams](https://aws.amazon.com/blogs/media/recording-mobile-video-to-amazon-s3-using-amazon-kinesis-video-streams/)
 
 ## Solution Architecture
 
