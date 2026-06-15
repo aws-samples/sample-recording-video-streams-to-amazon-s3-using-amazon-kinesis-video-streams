@@ -1,125 +1,123 @@
-# Implementing a Budget Circuit Breaker Using AWS Budgets and IAM Identity Center
+# Recording Video Streams to Amazon S3 Using Amazon Kinesis Video Streams
 
-Read the full AWS blog post here: [Implementing a Budget Circuit Breaker Using AWS Budgets and IAM Identity Center](https://aws.amazon.com/blogs/placeholder)
+
+Read the full AWS blog post here: [Recording Mobile Video to Amazon S3 Using Amazon Kinesis Video Streams](https://aws.amazon.com/blogs/media/recording-mobile-video-to-amazon-s3-using-amazon-kinesis-video-streams/)
 
 ## Solution Architecture
 
-![Budget Circuit Breaker Architecture Diagram](./budget-blog-diagram.png)
+![KVS to S3 Architecture Diagram](./blog-assets/architecture-diagram.png)
 
-This solution leverages several AWS services to provide automated cost protection across multi-account environments:
+This solution leverages several AWS services to provide seamless video streaming and archiving:
 
-- [**AWS Budgets**](https://aws.amazon.com/aws-cost-management/aws-budgets/) - Monitors actual spend against defined monthly thresholds and triggers notifications when exceeded.
+- [**Amazon Kinesis Video Streams (KVS)**](https://aws.amazon.com/kinesis/video-streams/) - Captures and processes video streams from connected devices for real-time and batch analytics.
 
-- [**Amazon SNS**](https://aws.amazon.com/sns/) - Receives budget threshold notifications and fans out to email subscribers and the Lambda function.
+- [**AWS Lambda**](https://aws.amazon.com/lambda/) - Executes code in response to triggers and processes video fragments for archiving, checking tags and alarm states.
 
-- [**AWS Lambda**](https://aws.amazon.com/lambda/) - Executes the access revocation logic, resolving Identity Center groups and removing permission set assignments.
+- [**AWS Step Functions**](https://aws.amazon.com/step-functions/) - Orchestrates the workflow of Lambda functions to ensure proper video processing and archiving.
 
-- [**AWS IAM Identity Center**](https://aws.amazon.com/iam/identity-center/) - Manages workforce access to AWS accounts; the circuit breaker revokes or downgrades group assignments here.
+- [**Amazon S3**](https://aws.amazon.com/s3/) - Provides durable storage for archived video clips.
 
-- [**Amazon SQS**](https://aws.amazon.com/sqs/) - Dead-letter queue captures failed Lambda invocations for retry and observability.
+- [**Amazon CloudWatch**](https://aws.amazon.com/cloudwatch/) - Monitors stream metrics and triggers alarms based on defined conditions.
 
-- [**Amazon CloudWatch**](https://aws.amazon.com/cloudwatch/) - Alarm monitors the DLQ for messages, alerting when revocation attempts fail.
+- [**Amazon EventBridge**](https://aws.amazon.com/eventbridge/) - Routes CloudWatch alarm state changes to trigger the Step Functions workflow.
 
-The workflow begins when AWS Budgets detects that actual spend has crossed a defined threshold. At 80%, an email alert notifies your team. At 100%, Budgets publishes to an SNS topic which triggers a Lambda function. The function resolves IAM Identity Center group IDs, lists all permission set assignments for those groups across target accounts, and revokes access — acting as a circuit breaker that stops further resource creation.
+- [**Amazon Cognito**](https://aws.amazon.com/cognito/) (Optional) - Provides user authentication for the Android mobile application.
+
+The workflow begins when a mobile device streams video to KVS. CloudWatch monitors stream metrics, and when conditions are met, an alarm triggers via EventBridge to start the Step Functions workflow. The workflow executes Lambda functions to check tags, alarm state, and upload video clips to S3 for archival storage.
 
 ## Deployment Instructions
 
 ### 1. Download the CloudFormation Template
-
 Download the CloudFormation YAML template file from the provided source.
 
-📥 **[Download CloudFormation Template](./circuit-breaker-template_final-draft.yaml)**
+📥 **[Download CloudFormation Template](./kinesis-video-streams-to-amazon-s3-blog-template.yaml)**
+
 
 ### 2. Deploy the CloudFormation Stack
-
-1. Navigate to the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/) in your management account.
-2. Click on "Create stack" → "With new resources (standard)".
+1. Navigate to the [AWS CloudFormation console](https://console.aws.amazon.com/cloudformation/home?region=us-east-1#) in the `us-east-1 (N. Virginia)` region.
+2. Click on "Create stack" > "With new resources (standard)".
 3. Upload the downloaded template file and click "Next".
 
 ### 3. Configure Stack Parameters
 
-**Stack name**: Enter a name for your stack (e.g., `budget-circuit-breaker`).
+ **Stack name**: Enter a name for your stack (e.g., "kvs-to-s3-blog-template").
 
-#### Budget Configuration
+#### Basic Configurations
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| **BudgetAmount** | Monthly budget threshold in USD | `100` |
-| **Threshold80** | First alert threshold percentage (email only) | `80` |
-| **Threshold100** | Second threshold percentage (triggers revocation) | `100` |
-| **EmailRecipients** | Comma-separated list of email addresses for budget alerts | `user@example.com` |
+These are parameters you need to proivde for successful deployment
 
-#### IAM Identity Center Configuration
+![CF-SETUP-1](./blog-assets/CF-template-basic-configuration.png)
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| **InstanceArn** | Your IAM Identity Center instance ARN | `arn:aws:sso:::instance/ssoins-123456789012` |
-| **TargetGroups** | Comma-separated list of Identity Center group display names to revoke access from | `group1` |
-| **TargetAccounts** | Comma-separated list of AWS account IDs to monitor and revoke access from | `123456789012` |
 
-> **Tip:** To find your IAM Identity Center instance ARN, run:
-> ```bash
-> aws sso-admin list-instances --query "Instances[0].InstanceArn" --output text
-> ```
+1. **Unique Deployment String**: Enter a lowercase string to be added to your stack resources, formatted as `[your-company-name]-[random-4-digits]` (e.g., "amazon-1234").
 
-#### Action Configuration
+2. **Video Archive Length**: Select the desired length of archival video clips in seconds. The default is 180 seconds (3 minutes).
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| **BudgetAction** | Action to take when threshold is exceeded | `revoke-full-access` |
-| **ReadOnlyPermissionSetArn** | ARN of the permission set for read-only access (required when action is `convert-to-read-only`) | *(empty)* |
+3. **Cognito Creation** (Optional): 
+   - Select **true** if you plan to use the sample Android application for stream testing.
+   - Leave as **false** (default) if you don't need the Android app.
 
-- **revoke-full-access** — removes all permission set assignments for the target groups.
-- **convert-to-read-only** — assigns a read-only permission set before revoking existing access, so teams retain visibility without the ability to create resources.
+#### Lambda Optional Configurations
 
-#### Deployment Region
+These paramaters are optional, if you do not need to modify Lambda VPC and encryption key configurations you can skip this part completely. 
 
-| Parameter | Description | Default |
-|-----------|-------------|---------|
-| **DeploymentRegion** | Region where SNS and Lambda will be deployed | `ca-central-1` |
+![CF-SETUP-2](./blog-assets/CF-template-lambda-config-1.png)
+![CF-SETUP-3](./blog-assets/CF-template-lambda-config-2.png)
 
-Allowed values: `us-east-1`, `us-west-2`, `ap-southeast-1`, `ap-northeast-1`, `eu-west-1`, `eu-central-1`, `ca-central-1`
+1. **Lambda VPC Deployment** (Optional): 
+   - Select **true** if you need to deploy the Lambda functions in a existing VPC.
+   - Leave as **false** (default) if you don't need the VPC configuration.
+
+2. **VPC Settings** (If said true in step 1): 
+   - Provide the ID of the VPC you plan to utilize. (eg: `vpc-123456789`)
+
+3. **Subnet Configuration** (If said true in step 1): 
+   - Provide the ID of the first Subnet you plan to utilize.  (eg: `subnet-123456789`)
+   - *Note: this subnet needs to be part of VPC indicated above*
+
+4. **Subnet Configuration 2** (If said true in step 1): 
+   - Provide the ID of the second Subnet you plan to utilize.  (eg: `subnet-98765321`)
+   - *Note: this subnet needs to be part of VPC indicated above*
+
+5. **Seurity Group Configuration** (If said true in step 1): 
+    - Provide the ID of the security group you plan to utilize.  (eg: `sg-123456789`)
+   - *Note: this security group needs to be part of VPC indicated above*
+
+6. **Lambda Encyrption Key Configuration** (Optional): 
+   - Select **true** if you need to utilize a customer-managed KMS key to encrypt Lambda environment variables.
+   - Leave as **false** (default) will utilize servcie managed keys.
+
+7. **Customer-Managed KMS Key** (If said true in step 6): 
+    - Provide the ARN of the KMS key you plan to utilize.  (eg: `arn:aws:kms:{YOUR-REGION}:{YOUR-AWS-ID}:key/{YOUR-KMS-KEY-ID}`)
+
 
 ### 4. Complete Stack Creation
-
 1. Click "Next" to proceed to the stack options page.
 2. Configure any additional stack options as desired.
 3. Click "Next" to proceed to the review page.
 4. Review your configuration and scroll to the bottom of the page.
-5. Check the acknowledgement box confirming AWS CloudFormation might create IAM resources with custom names.
-6. Click "Submit" to launch the deployment.
-
-### 5. Confirm the SNS Email Subscription
-
-After deployment, each email address in `EmailRecipients` will receive a subscription confirmation email. Click **Confirm subscription** in that email to start receiving budget alerts.
+5. Check the acknowledgement box confirming AWS CloudFormation might create IAM resources.
+6. Click "Create stack" to launch the deployment.
 
 ## Next Steps
 
-After the stack creation completes successfully, click on the "Outputs" tab of your stack in the CloudFormation console. Here you'll find:
-- SNS Topic ARN
-- Lambda Function ARN
-- Budget Name
+After the stack creation completes successfully (this might take a few minutes), click on the "Outputs" tab of your stack in the CloudFormation console.
+Here you'll find important information such as:
+   - S3 bucket names
+   - Lambda function names
+   - Other resources created by the stack
+   - Connection details or endpoints you may need for integration
 
 ## Troubleshooting
 
 If stack creation fails, check the "Events" tab in the CloudFormation console for error messages that can help diagnose the issue.
 
-Common issues:
-- **IAM Identity Center instance ARN is incorrect** — verify using the CLI command in Step 3.
-- **Target group names don't match** — group display names are case-sensitive; confirm them in the Identity Center console.
-- **DLQ alarm fires** — check the Lambda CloudWatch logs for the specific revocation error.
-
 ## Solution Walkthrough
+Head back to the [Recording mobile video to Amazon S3 using Amazon Kinesis Video Streams](https://aws.amazon.com/media) AWS blog for walkthrough of the solution, future considerations and clean up. 
 
-Head back to the [Implementing a Budget Circuit Breaker Using AWS Budgets and IAM Identity Center](https://aws.amazon.com/blogs/placeholder) AWS blog for a walkthrough of the solution, future considerations, and clean up.
+## Considerations
 
-## Clean Up
-
-To remove all resources created by this solution, delete the stack from the CloudFormation console or run:
-
-```bash
-aws cloudformation delete-stack --stack-name budget-circuit-breaker
-```
+This solution has been tested with the [AWS samples AmazonKinesisVideoDemoApp](https://github.com/awslabs/aws-sdk-android-samples/tree/main/AmazonKinesisVideoDemoApp)
 
 ## Security
 
@@ -128,3 +126,4 @@ See [CONTRIBUTING](CONTRIBUTING.md#security-issue-notifications) for more inform
 ## License
 
 This library is licensed under the MIT-0 License. See the LICENSE file.
+
